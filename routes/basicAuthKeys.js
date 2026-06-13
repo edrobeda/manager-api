@@ -11,7 +11,7 @@ const onlySuper = (req, res, next) => {
 router.get('/', onlySuper, async (req, res) => {
   try {
     const keys = await db('basic_auth_keys')
-      .select('id', 'nome', 'ativo', 'created_at')
+      .select('id', 'nome', 'ativo', 'evento_id', 'created_at')
       .orderBy('created_at', 'desc');
     res.json(keys);
   } catch {
@@ -21,7 +21,7 @@ router.get('/', onlySuper, async (req, res) => {
 
 // Cria nova chave — retorna o token apenas uma vez
 router.post('/', onlySuper, async (req, res) => {
-  const { nome } = req.body;
+  const { nome, evento_id } = req.body;
   if (!nome?.trim()) return res.status(400).json({ error: 'Nome é obrigatório' });
 
   const token = crypto.randomBytes(32).toString('hex');
@@ -32,22 +32,29 @@ router.post('/', onlySuper, async (req, res) => {
       nome: nome.trim(),
       token_hash: hash,
       ativo: true,
+      evento_id: evento_id || null,
       created_by: req.user?.userId || null,
     }).returning('id');
     const id = row?.id ?? row;
-    res.status(201).json({ id, nome: nome.trim(), token, ativo: true });
+    res.status(201).json({ id, nome: nome.trim(), token, ativo: true, evento_id: evento_id || null });
   } catch {
     res.status(500).json({ error: 'Erro ao criar chave' });
   }
 });
 
-// Ativa / desativa
+// Ativa / desativa / vincula evento
 router.patch('/:id', onlySuper, async (req, res) => {
-  const { ativo } = req.body;
-  if (typeof ativo !== 'boolean') return res.status(400).json({ error: 'Campo ativo (boolean) obrigatório' });
+  const { ativo, evento_id } = req.body;
+
+  const updates = {};
+  if (typeof ativo === 'boolean') updates.ativo = ativo;
+  if ('evento_id' in req.body) updates.evento_id = evento_id ?? null;
+
+  if (Object.keys(updates).length === 0)
+    return res.status(400).json({ error: 'Nenhum campo válido para atualizar' });
 
   try {
-    const updated = await db('basic_auth_keys').where({ id: req.params.id }).update({ ativo });
+    const updated = await db('basic_auth_keys').where({ id: req.params.id }).update(updates);
     if (!updated) return res.status(404).json({ error: 'Chave não encontrada' });
     res.json({ ok: true });
   } catch {
