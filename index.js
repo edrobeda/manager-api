@@ -21,6 +21,7 @@ app.use('/api/partidas',    auth, require('./routes/partidas'));
 app.use('/api/eventos',     auth, require('./routes/eventos'));
 app.use('/api/basic-auth',  auth, require('./routes/basicAuthKeys'));
 app.use('/api/game',        auth, require('./routes/game'));
+app.use('/api/uploads',     auth, require('./routes/uploads'));
 
 const PORT = process.env.PORT || 3004;
 app.listen(PORT, () => console.log(`Manager API rodando na porta ${PORT}`));
