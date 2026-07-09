@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const auth = require('./middleware/basicAuth');
@@ -21,6 +22,8 @@ app.use('/api/partidas',    auth, require('./routes/partidas'));
 app.use('/api/eventos',     auth, require('./routes/eventos'));
 app.use('/api/basic-auth',  auth, require('./routes/basicAuthKeys'));
 app.use('/api/game',        auth, require('./routes/game'));
+app.use('/api/produtos-totem', auth, require('./routes/produtosTotem'));
+app.use('/api/totem',       auth, require('./routes/totemPublic'));
 
 const PORT = process.env.PORT || 3004;
 app.listen(PORT, () => console.log(`Manager API rodando na porta ${PORT}`));
