@@ -31,7 +31,7 @@ router.post('/', (req, res) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
 
-    const url = `${req.protocol}://${req.get('host')}/api/uploads/${req.file.filename}`;
+    const url = `${req.protocol}://${req.get('host')}/api/totem-uploads/${req.file.filename}`;
     res.status(201).json({ success: true, url });
   });
 });
