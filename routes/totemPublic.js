@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const db = require('../db');
 
-const CAMPOS = ['slug', 'lang', 'nome', 'linha', 'descricao_curta', 'descricao', 'imagem_produto_url', 'imagem_banner_url', 'video_url', 'extras', 'ordem'];
+const CAMPOS = ['slug', 'lang', 'nome', 'linha', 'descricao_curta', 'descricao', 'imagem_produto_url', 'imagem_banner_url', 'video_url', 'video_local_url', 'url_ficha', 'extras', 'ordem', 'destaque', 'serie'];
 
 // Deriva o tenant a partir do evento vinculado à chave de API usada.
 // Chave sem evento_id não tem como identificar o tenant com segurança — bloqueada.
@@ -22,20 +22,24 @@ router.get('/produtos', async (req, res) => {
 
     const lang = req.query.lang || 'pt';
 
-    // Base sempre em pt (catálogo completo) — quando existir tradução no idioma pedido, ela substitui a linha pt
-    const base = await db('produtos_totem')
-      .where({ tenant_id: tenantId, ativo: true, lang: 'pt' })
+    // Busca todas as versões de idioma de uma vez — permite montar a lista no idioma pedido
+    // e ainda embutir as traduções de cada produto (pro totem trocar de idioma sem nova chamada de rede)
+    const todos = await db('produtos_totem')
+      .where({ tenant_id: tenantId, ativo: true })
       .orderBy('ordem', 'asc')
       .select(CAMPOS);
 
-    let produtos = base;
-    if (lang !== 'pt') {
-      const traduzidos = await db('produtos_totem')
-        .where({ tenant_id: tenantId, ativo: true, lang })
-        .select(CAMPOS);
-      const porSlug = Object.fromEntries(traduzidos.map((p) => [p.slug, p]));
-      produtos = base.map((p) => ({ ...(porSlug[p.slug] ?? p), ordem: p.ordem }));
-    }
+    const porSlug = new Map();
+    todos.forEach((p) => {
+      if (!porSlug.has(p.slug)) porSlug.set(p.slug, []);
+      porSlug.get(p.slug).push(p);
+    });
+
+    const produtos = [...porSlug.values()].map((versoes) => {
+      const base = versoes.find((v) => v.lang === 'pt') ?? versoes[0];
+      const atual = versoes.find((v) => v.lang === lang) ?? base;
+      return { ...atual, ordem: base.ordem, idiomas: versoes };
+    }).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }));
 
     res.json({ success: true, produtos });
   } catch (err) {
@@ -59,6 +63,22 @@ router.get('/produtos/:slug', async (req, res) => {
 
     if (!produto) return res.status(404).json({ error: 'Produto não encontrado' });
     res.json({ success: true, produto });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Configs operacionais do totem (ex: banner_delay) — sem idioma, não são traduzíveis
+router.get('/configuracoes', async (req, res) => {
+  try {
+    const tenantId = await resolveTenantId(req);
+    if (!tenantId) return res.status(403).json({ error: 'Chave de API sem evento vinculado' });
+
+    const configuracoes = await db('config_totem')
+      .where({ tenant_id: tenantId, ativo: true })
+      .select('config_slug', 'valor', 'tipo', 'ativo');
+
+    res.json({ success: true, configuracoes });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -29,8 +29,8 @@ router.get('/', async (req, res) => {
     const produtos = await db('produtos_totem')
       .where(tenantFilter(req))
       .where('lang', req.query.lang || 'pt')
-      .orderBy('ordem', 'asc')
       .select('*');
+    produtos.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }));
     res.json({ success: true, produtos });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -53,8 +53,8 @@ router.post('/', async (req, res) => {
   try {
     const {
       nome, linha, descricao_curta, descricao,
-      imagem_produto_url, imagem_banner_url, video_url,
-      extras, ordem, evento_id, lang, slug: slugTraducao,
+      imagem_produto_url, imagem_banner_url, video_url, video_local_url, url_ficha,
+      extras, ordem, evento_id, lang, slug: slugTraducao, destaque, serie,
     } = req.body;
 
     if (!nome || !linha) return res.status(400).json({ error: 'Nome e linha são obrigatórios' });
@@ -79,8 +79,9 @@ router.post('/', async (req, res) => {
 
     const [produto] = await db('produtos_totem').insert({
       tenant_id, slug, lang: lang || 'pt', nome, linha, descricao_curta, descricao,
-      imagem_produto_url, imagem_banner_url, video_url,
+      imagem_produto_url, imagem_banner_url, video_url, video_local_url, url_ficha,
       extras: extras ?? {}, ordem: ordem ?? 0, evento_id: evento_id || null,
+      destaque: destaque ?? false, serie: serie || null,
     }).returning('*');
 
     res.status(201).json({ success: true, produto });
@@ -95,17 +96,17 @@ router.put('/:id', async (req, res) => {
     const where = { id: req.params.id, ...tenantFilter(req) };
     const {
       nome, linha, descricao_curta, descricao,
-      imagem_produto_url, imagem_banner_url, video_url,
-      extras, ordem, evento_id, ativo,
+      imagem_produto_url, imagem_banner_url, video_url, video_local_url, url_ficha,
+      extras, ordem, evento_id, ativo, destaque, serie,
     } = req.body;
 
     // Slug é gerado uma única vez na criação e não muda em edições,
     // para não quebrar links/QR codes já publicados no totem.
     const [produto] = await db('produtos_totem').where(where).update({
       nome, linha, descricao_curta, descricao,
-      imagem_produto_url, imagem_banner_url, video_url,
+      imagem_produto_url, imagem_banner_url, video_url, video_local_url, url_ficha,
       extras, ordem, evento_id: evento_id === undefined ? undefined : (evento_id || null),
-      ativo, updated_at: db.fn.now(),
+      ativo, destaque, serie: serie === undefined ? undefined : (serie || null), updated_at: db.fn.now(),
     }).returning('*');
 
     if (!produto) return res.status(404).json({ error: 'Produto não encontrado' });

@@ -1,2 +1,6 @@
 node_modules/
 .env
+
+# Arquivos enviados via upload — ficam só no disco do servidor
+uploads/*
+!uploads/.gitkeep
