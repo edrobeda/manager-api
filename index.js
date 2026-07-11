@@ -26,6 +26,7 @@ app.use('/api/partidas',    auth, require('./routes/partidas'));
 app.use('/api/eventos',     auth, require('./routes/eventos'));
 app.use('/api/basic-auth',  auth, require('./routes/basicAuthKeys'));
 app.use('/api/game',        auth, require('./routes/game'));
+app.use('/api/uploads',     auth, require('./routes/uploads'));
 app.use('/api/totem-uploads', auth, require('./routes/totemUploads'));
 app.use('/api/produtos-totem', auth, require('./routes/produtosTotem'));
 app.use('/api/config-totem', auth, require('./routes/configTotem'));

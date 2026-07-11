@@ -1,11 +1,11 @@
 exports.up = function(knex) {
-  return knex.schema.table('tenants', (t) => {
-    t.jsonb('game_credentials');
+  return knex.schema.alterTable('tenants', (table) => {
+    table.jsonb('game_credentials').nullable();
   });
 };
 
 exports.down = function(knex) {
-  return knex.schema.table('tenants', (t) => {
-    t.dropColumn('game_credentials');
+  return knex.schema.alterTable('tenants', (table) => {
+    table.dropColumn('game_credentials');
   });
 };

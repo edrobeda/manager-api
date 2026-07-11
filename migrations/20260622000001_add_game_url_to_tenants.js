@@ -1,11 +1,11 @@
 exports.up = function(knex) {
-  return knex.schema.table('tenants', (t) => {
-    t.string('game_url', 255);
+  return knex.schema.alterTable('tenants', (table) => {
+    table.string('game_url', 255).nullable();
   });
 };
 
 exports.down = function(knex) {
-  return knex.schema.table('tenants', (t) => {
-    t.dropColumn('game_url');
+  return knex.schema.alterTable('tenants', (table) => {
+    table.dropColumn('game_url');
   });
 };
