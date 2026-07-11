@@ -31,7 +31,9 @@ router.post('/', (req, res) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
 
-    const url = `${req.protocol}://${req.get('host')}/api/totem-uploads/${req.file.filename}`;
+    // atrás do proxy de produção req.protocol sempre vem 'http' — usa o header de encaminhamento quando existir
+    const protocolo = req.headers['x-forwarded-proto']?.split(',')[0] || req.protocol;
+    const url = `${protocolo}://${req.get('host')}/api/totem-uploads/${req.file.filename}`;
     res.status(201).json({ success: true, url });
   });
 });
