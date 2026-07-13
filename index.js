@@ -14,6 +14,8 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 // Imagens/vídeos de produtos do totem — públicos porque <img>/<video> não mandam header de Authorization.
 // Path próprio (não é /api/uploads) porque essa rota já existe pra outra coisa (gestão de arquivos/backups)
 app.use('/api/totem-uploads', express.static(path.join(__dirname, 'uploads')));
+// Redirect de link curto — público porque quem escaneia o QR code não tem chave de API
+app.use('/r', require('./routes/redirect'));
 
 // Rotas protegidas
 app.use('/api/backups',     auth, require('./routes/backups'));
@@ -31,6 +33,8 @@ app.use('/api/totem-uploads', auth, require('./routes/totemUploads'));
 app.use('/api/produtos-totem', auth, require('./routes/produtosTotem'));
 app.use('/api/config-totem', auth, require('./routes/configTotem'));
 app.use('/api/totem',       auth, require('./routes/totemPublic'));
+app.use('/api/short-links', auth, require('./routes/shortLinks'));
+app.use('/api/acessos',     auth, require('./routes/acessos'));
 
 const PORT = process.env.PORT || 3004;
 app.listen(PORT, () => console.log(`Manager API rodando na porta ${PORT}`));
