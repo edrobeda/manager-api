@@ -18,6 +18,12 @@ const resolveContexto = async (req) => {
   return { tenantId: evento.tenant_id, eventoId: key.evento_id };
 };
 
+// Atrás do proxy de produção req.protocol sempre vem 'http' — usa o header de encaminhamento quando existir
+function baseUrlDe(req) {
+  const protocolo = req.headers['x-forwarded-proto']?.split(',')[0] || req.protocol;
+  return `${protocolo}://${req.get('host')}`;
+}
+
 // Troca a URL direta da ficha por um link curto nosso — assim dá pra saber se
 // alguém de fato escaneou o QR code (URL direta nunca passa pelo servidor).
 // Reaproveita o mesmo link pra cada produto/idioma, então o QR não fica mudando de código.
@@ -45,7 +51,7 @@ router.get('/produtos', async (req, res) => {
       .orderBy('ordem', 'asc')
       .select(CAMPOS);
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = baseUrlDe(req);
     await comLinkCurtoDeFicha(todos, eventoId, baseUrl);
 
     const porSlug = new Map();
@@ -83,7 +89,7 @@ router.get('/produtos/:slug', async (req, res) => {
 
     if (!produto) return res.status(404).json({ error: 'Produto não encontrado' });
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = baseUrlDe(req);
     await comLinkCurtoDeFicha([produto], eventoId, baseUrl);
 
     res.json({ success: true, produto });
