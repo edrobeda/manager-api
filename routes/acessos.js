@@ -9,16 +9,19 @@ const resolveEventoId = async (req) => {
   return key?.evento_id ?? null;
 };
 
-// Registro de página acessada dentro do totem (SPA, troca de rota sem reload)
+// Registro de acesso dentro do totem: troca de página (tipo implícito 'pagina',
+// { path }) ou um evento explícito como vídeo assistido ({ tipo, referencia }).
 router.post('/', async (req, res) => {
   try {
     const eventoId = await resolveEventoId(req);
     if (!eventoId) return res.status(403).json({ error: 'Chave de API sem evento vinculado' });
 
-    const { path } = req.body;
-    if (!path) return res.status(400).json({ error: 'path é obrigatório' });
+    const { path, tipo, referencia } = req.body;
+    const tipoFinal = tipo || 'pagina';
+    const referenciaFinal = referencia ?? path;
+    if (!referenciaFinal) return res.status(400).json({ error: 'path ou referencia é obrigatório' });
 
-    await db('acessos').insert({ evento_id: eventoId, tipo: 'pagina', referencia: path });
+    await db('acessos').insert({ evento_id: eventoId, tipo: tipoFinal, referencia: referenciaFinal });
 
     res.status(201).json({ success: true });
   } catch (err) {

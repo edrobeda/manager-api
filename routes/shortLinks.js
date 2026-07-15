@@ -1,8 +1,6 @@
 const router = require('express').Router();
-const crypto = require('crypto');
 const db = require('../db');
-
-const gerarCodigo = () => crypto.randomBytes(5).toString('base64url');
+const { gerarCodigo } = require('../utils/codigoCurto');
 
 // Gerador genérico de link curto — não é atrelado a produto ou qualquer outra entidade,
 // qualquer parte do sistema pode pedir um link curto pra uma URL.
