@@ -6,7 +6,9 @@ const auth = require('./middleware/basicAuth');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// limite maior que o padrão (100kb) pra caber imagens embutidas em base64
+// no conteúdo rico dos produtos do totem (ex.: campo "descricao")
+app.use(express.json({ limit: '15mb' }));
 
 // Rotas públicas
 app.use('/api/auth', require('./routes/auth'));
