@@ -2,7 +2,7 @@ const router = require('express').Router();
 const db = require('../db');
 const { obterOuCriarShortLink } = require('../utils/shortLinks');
 
-const CAMPOS = ['slug', 'lang', 'nome', 'linha', 'descricao_curta', 'descricao', 'imagem_produto_url', 'imagem_banner_url', 'video_url', 'video_local_url', 'url_ficha', 'extras', 'ordem', 'destaque', 'serie'];
+const CAMPOS = ['slug', 'lang', 'nome', 'linha', 'descricao_curta', 'descricao', 'imagem_produto_url', 'imagem_banner_url', 'video_url', 'video_local_url', 'url_ficha', 'extras', 'ordem', 'destaque', 'serie', 'banner_institucional'];
 
 // Deriva o tenant e o evento a partir da chave de API usada.
 // Chave sem evento_id não tem como identificar o tenant com segurança — bloqueada.
@@ -46,8 +46,10 @@ router.get('/produtos', async (req, res) => {
 
     // Busca todas as versões de idioma de uma vez — permite montar a lista no idioma pedido
     // e ainda embutir as traduções de cada produto (pro totem trocar de idioma sem nova chamada de rede)
+    // banner_institucional entra mesmo com ativo=false — é um item só de banner, não um produto real
     const todos = await db('produtos_totem')
-      .where({ tenant_id: tenantId, ativo: true })
+      .where({ tenant_id: tenantId })
+      .andWhere((qb) => qb.where('ativo', true).orWhere('banner_institucional', true))
       .orderBy('ordem', 'asc')
       .select(CAMPOS);
 
@@ -80,11 +82,12 @@ router.get('/produtos/:slug', async (req, res) => {
     const { tenantId, eventoId } = contexto;
 
     const lang = req.query.lang || 'pt';
-    const where = { tenant_id: tenantId, ativo: true, slug: req.params.slug };
+    const where = { tenant_id: tenantId, slug: req.params.slug };
+    const ativoOuBanner = (qb) => qb.where('ativo', true).orWhere('banner_institucional', true);
 
-    let produto = await db('produtos_totem').where({ ...where, lang }).select(CAMPOS).first();
+    let produto = await db('produtos_totem').where({ ...where, lang }).andWhere(ativoOuBanner).select(CAMPOS).first();
     if (!produto && lang !== 'pt') {
-      produto = await db('produtos_totem').where({ ...where, lang: 'pt' }).select(CAMPOS).first();
+      produto = await db('produtos_totem').where({ ...where, lang: 'pt' }).andWhere(ativoOuBanner).select(CAMPOS).first();
     }
 
     if (!produto) return res.status(404).json({ error: 'Produto não encontrado' });

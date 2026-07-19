@@ -54,7 +54,7 @@ router.post('/', async (req, res) => {
     const {
       nome, linha, descricao_curta, descricao,
       imagem_produto_url, imagem_banner_url, video_url, video_local_url, url_ficha,
-      extras, ordem, evento_id, lang, slug: slugTraducao, destaque, serie,
+      extras, ordem, evento_id, lang, slug: slugTraducao, destaque, serie, banner_institucional,
     } = req.body;
 
     if (!nome || !linha) return res.status(400).json({ error: 'Nome e linha são obrigatórios' });
@@ -82,6 +82,7 @@ router.post('/', async (req, res) => {
       imagem_produto_url, imagem_banner_url, video_url, video_local_url, url_ficha,
       extras: extras ?? {}, ordem: ordem ?? 0, evento_id: evento_id || null,
       destaque: destaque ?? false, serie: serie || null,
+      banner_institucional: banner_institucional ?? false,
     }).returning('*');
 
     res.status(201).json({ success: true, produto });
@@ -97,7 +98,7 @@ router.put('/:id', async (req, res) => {
     const {
       nome, linha, descricao_curta, descricao,
       imagem_produto_url, imagem_banner_url, video_url, video_local_url, url_ficha,
-      extras, ordem, evento_id, ativo, destaque, serie,
+      extras, ordem, evento_id, ativo, destaque, serie, banner_institucional,
     } = req.body;
 
     // Slug é gerado uma única vez na criação e não muda em edições,
@@ -106,7 +107,8 @@ router.put('/:id', async (req, res) => {
       nome, linha, descricao_curta, descricao,
       imagem_produto_url, imagem_banner_url, video_url, video_local_url, url_ficha,
       extras, ordem, evento_id: evento_id === undefined ? undefined : (evento_id || null),
-      ativo, destaque, serie: serie === undefined ? undefined : (serie || null), updated_at: db.fn.now(),
+      ativo, destaque, serie: serie === undefined ? undefined : (serie || null),
+      banner_institucional, updated_at: db.fn.now(),
     }).returning('*');
 
     if (!produto) return res.status(404).json({ error: 'Produto não encontrado' });
