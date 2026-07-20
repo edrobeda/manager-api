@@ -82,12 +82,13 @@ router.get('/produtos/:slug', async (req, res) => {
     const { tenantId, eventoId } = contexto;
 
     const lang = req.query.lang || 'pt';
-    const where = { tenant_id: tenantId, slug: req.params.slug };
-    const ativoOuBanner = (qb) => qb.where('ativo', true).orWhere('banner_institucional', true);
+    // banner_institucional é só exibição no carrossel — não tem página de produto própria,
+    // então (ao contrário de /produtos) essa rota não contorna o filtro de ativo pra ele
+    const where = { tenant_id: tenantId, ativo: true, slug: req.params.slug };
 
-    let produto = await db('produtos_totem').where({ ...where, lang }).andWhere(ativoOuBanner).select(CAMPOS).first();
+    let produto = await db('produtos_totem').where({ ...where, lang }).select(CAMPOS).first();
     if (!produto && lang !== 'pt') {
-      produto = await db('produtos_totem').where({ ...where, lang: 'pt' }).andWhere(ativoOuBanner).select(CAMPOS).first();
+      produto = await db('produtos_totem').where({ ...where, lang: 'pt' }).select(CAMPOS).first();
     }
 
     if (!produto) return res.status(404).json({ error: 'Produto não encontrado' });
