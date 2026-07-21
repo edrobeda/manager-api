@@ -18,6 +18,9 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api/totem-uploads', express.static(path.join(__dirname, 'uploads')));
 // Redirect de link curto — público porque quem escaneia o QR code não tem chave de API
 app.use('/r', require('./routes/redirect'));
+// Cidades/estados (IBGE) — dado de referência público, sem tenant, pra qualquer
+// formulário (ex: cadastro de um game) usar direto sem precisar de chave de API
+app.use('/api', require('./routes/localizacao'));
 
 // Rotas protegidas
 app.use('/api/backups',     auth, require('./routes/backups'));
