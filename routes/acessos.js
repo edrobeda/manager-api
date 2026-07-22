@@ -10,18 +10,24 @@ const resolveEventoId = async (req) => {
 };
 
 // Registro de acesso dentro do totem: troca de página (tipo implícito 'pagina',
-// { path }) ou um evento explícito como vídeo assistido ({ tipo, referencia }).
+// { path }) ou um evento explícito como vídeo assistido ou sessão de ociosidade
+// ({ tipo, referencia, duracao_segundos }) — duracao_segundos só se aplica a 'standby'.
 router.post('/', async (req, res) => {
   try {
     const eventoId = await resolveEventoId(req);
     if (!eventoId) return res.status(403).json({ error: 'Chave de API sem evento vinculado' });
 
-    const { path, tipo, referencia } = req.body;
+    const { path, tipo, referencia, duracao_segundos } = req.body;
     const tipoFinal = tipo || 'pagina';
     const referenciaFinal = referencia ?? path;
     if (!referenciaFinal) return res.status(400).json({ error: 'path ou referencia é obrigatório' });
 
-    await db('acessos').insert({ evento_id: eventoId, tipo: tipoFinal, referencia: referenciaFinal });
+    await db('acessos').insert({
+      evento_id: eventoId,
+      tipo: tipoFinal,
+      referencia: referenciaFinal,
+      duracao_segundos: duracao_segundos ?? null,
+    });
 
     res.status(201).json({ success: true });
   } catch (err) {

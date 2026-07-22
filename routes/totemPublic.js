@@ -137,7 +137,7 @@ router.get('/estatisticas', async (req, res) => {
       .leftJoin('short_links', 'short_links.id', 'acessos.short_link_id')
       .where('acessos.evento_id', eventoId)
       .andWhere('acessos.criado_em', '>=', desde)
-      .select('acessos.tipo', 'acessos.referencia', 'acessos.criado_em', 'short_links.url_destino')
+      .select('acessos.tipo', 'acessos.referencia', 'acessos.criado_em', 'acessos.duracao_segundos', 'short_links.url_destino')
       .orderBy('acessos.criado_em', 'desc');
 
     const produtos = await db('produtos_totem')
@@ -165,7 +165,7 @@ router.get('/estatisticas', async (req, res) => {
         const produto = porUrlFicha.get(a.url_destino);
         if (produto) { slug = produto.slug; nome = produto.nome; }
       }
-      return { tipo: a.tipo, slug, nome, criadoEm: a.criado_em };
+      return { tipo: a.tipo, slug, nome, criadoEm: a.criado_em, duracaoSegundos: a.duracao_segundos };
     });
 
     res.json({ success: true, eventos });
