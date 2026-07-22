@@ -18,6 +18,21 @@ const resolveContexto = async (req) => {
   return { tenantId: evento.tenant_id, eventoId: key.evento_id };
 };
 
+// Converte 'dd/mm/aaaa HH:mm:ss - dd/mm/aaaa HH:mm:ss' (formato do config data_analiticas)
+// em { inicio, fim } como Date — retorna null se o texto não bater com o formato esperado
+// ou virar uma data inválida, pra uma janela mal cadastrada só ser ignorada, não derrubar a rota.
+function parseJanelaAnalitica(valor) {
+  const m = String(valor).trim().match(
+    /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})\s*-\s*(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/
+  );
+  if (!m) return null;
+  const [, d1, mo1, y1, h1, mi1, s1, d2, mo2, y2, h2, mi2, s2] = m;
+  const inicio = new Date(`${y1}-${mo1}-${d1}T${h1}:${mi1}:${s1}`);
+  const fim = new Date(`${y2}-${mo2}-${d2}T${h2}:${mi2}:${s2}`);
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime())) return null;
+  return { inicio, fim };
+}
+
 // Atrás do proxy de produção req.protocol sempre vem 'http' — usa o header de encaminhamento quando existir
 function baseUrlDe(req) {
   const protocolo = req.headers['x-forwarded-proto']?.split(',')[0] || req.protocol;
@@ -133,10 +148,27 @@ router.get('/estatisticas', async (req, res) => {
     const desde = new Date();
     desde.setDate(desde.getDate() - dias);
 
+    // data_analiticas (config_totem, 0..N linhas por tenant, mesmo padrão de standby_video_url):
+    // se houver ao menos uma janela cadastrada, cliques e ociosidade só contam dentro delas —
+    // pensado pra descartar acesso de teste/manutenção fora do horário do evento. Sem nenhuma
+    // janela ativa, mantém o comportamento anterior (conta tudo dentro de `dias`).
+    const configsJanela = await db('config_totem')
+      .where({ tenant_id: tenantId, config_slug: 'data_analiticas', ativo: true })
+      .select('valor');
+    const janelas = configsJanela
+      .map((c) => parseJanelaAnalitica(c.valor))
+      .filter(Boolean);
+
     const acessos = await db('acessos')
       .leftJoin('short_links', 'short_links.id', 'acessos.short_link_id')
       .where('acessos.evento_id', eventoId)
       .andWhere('acessos.criado_em', '>=', desde)
+      .modify((qb) => {
+        if (janelas.length === 0) return;
+        qb.andWhere((sub) => {
+          janelas.forEach(({ inicio, fim }) => sub.orWhereBetween('acessos.criado_em', [inicio, fim]));
+        });
+      })
       .select('acessos.tipo', 'acessos.referencia', 'acessos.criado_em', 'acessos.duracao_segundos', 'acessos.totem_id', 'short_links.url_destino')
       .orderBy('acessos.criado_em', 'desc');
 
