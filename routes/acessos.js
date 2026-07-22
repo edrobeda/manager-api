@@ -12,12 +12,14 @@ const resolveEventoId = async (req) => {
 // Registro de acesso dentro do totem: troca de página (tipo implícito 'pagina',
 // { path }) ou um evento explícito como vídeo assistido ou sessão de ociosidade
 // ({ tipo, referencia, duracao_segundos }) — duracao_segundos só se aplica a 'standby'.
+// totem_id identifica o aparelho físico (gerado e persistido no localStorage do
+// totem) — permite separar as estatísticas quando há mais de um totem no mesmo evento.
 router.post('/', async (req, res) => {
   try {
     const eventoId = await resolveEventoId(req);
     if (!eventoId) return res.status(403).json({ error: 'Chave de API sem evento vinculado' });
 
-    const { path, tipo, referencia, duracao_segundos } = req.body;
+    const { path, tipo, referencia, duracao_segundos, totem_id } = req.body;
     const tipoFinal = tipo || 'pagina';
     const referenciaFinal = referencia ?? path;
     if (!referenciaFinal) return res.status(400).json({ error: 'path ou referencia é obrigatório' });
@@ -27,6 +29,7 @@ router.post('/', async (req, res) => {
       tipo: tipoFinal,
       referencia: referenciaFinal,
       duracao_segundos: duracao_segundos ?? null,
+      totem_id: totem_id ?? null,
     });
 
     res.status(201).json({ success: true });
