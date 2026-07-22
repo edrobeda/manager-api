@@ -18,17 +18,23 @@ const resolveContexto = async (req) => {
   return { tenantId: evento.tenant_id, eventoId: key.evento_id };
 };
 
-// Converte 'dd/mm/aaaa HH:mm:ss - dd/mm/aaaa HH:mm:ss' (formato do config data_analiticas)
-// em { inicio, fim } como Date — retorna null se o texto não bater com o formato esperado
-// ou virar uma data inválida, pra uma janela mal cadastrada só ser ignorada, não derrubar a rota.
+// Horário de Brasília é fixo em UTC-3 (Brasil aboliu o horário de verão em 2019) — usado pra
+// interpretar os horários digitados na config, já que quem cadastra pensa em horário local,
+// mas acessos.criado_em é gravado em UTC.
+const OFFSET_BRASILIA = '-03:00';
+
+// Converte 'dd/mm/aaaa HH:mm:ss - dd/mm/aaaa HH:mm:ss' (formato do config data_analiticas,
+// horários em horário de Brasília) em { inicio, fim } como Date UTC — retorna null se o texto
+// não bater com o formato esperado ou virar uma data inválida, pra uma janela mal cadastrada
+// só ser ignorada, não derrubar a rota.
 function parseJanelaAnalitica(valor) {
   const m = String(valor).trim().match(
     /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})\s*-\s*(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/
   );
   if (!m) return null;
   const [, d1, mo1, y1, h1, mi1, s1, d2, mo2, y2, h2, mi2, s2] = m;
-  const inicio = new Date(`${y1}-${mo1}-${d1}T${h1}:${mi1}:${s1}`);
-  const fim = new Date(`${y2}-${mo2}-${d2}T${h2}:${mi2}:${s2}`);
+  const inicio = new Date(`${y1}-${mo1}-${d1}T${h1}:${mi1}:${s1}${OFFSET_BRASILIA}`);
+  const fim = new Date(`${y2}-${mo2}-${d2}T${h2}:${mi2}:${s2}${OFFSET_BRASILIA}`);
   if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime())) return null;
   return { inicio, fim };
 }
