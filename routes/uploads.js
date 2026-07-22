@@ -16,6 +16,7 @@ const ALLOWED = {
   'text/xml': '.xml', 'application/xml': '.xml',
   'application/vnd.ms-excel': '.xls',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+  'video/mp4': '.mp4', 'video/webm': '.webm', 'video/quicktime': '.mov',
 };
 
 const storage = multer.diskStorage({
@@ -29,7 +30,8 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 30 * 1024 * 1024 },
+  // 250MB — mesmo teto usado pra vídeo em totemUploads.js, senão um mp4 real esbarra no limite antigo (30MB)
+  limits: { fileSize: 250 * 1024 * 1024 },
   fileFilter: (req, file, cb) =>
     ALLOWED[file.mimetype] ? cb(null, true) : cb(new Error(`Tipo não permitido: ${file.mimetype}`)),
 });
