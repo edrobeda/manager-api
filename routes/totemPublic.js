@@ -62,11 +62,13 @@ router.get('/produtos', async (req, res) => {
       porSlug.get(p.slug).push(p);
     });
 
+    // porSlug preserva a ordem de inserção, que já veio da query orderBy('ordem') acima —
+    // por isso não reordena de novo aqui (antes reordenava por nome e descartava a ordem do banco)
     const produtos = [...porSlug.values()].map((versoes) => {
       const base = versoes.find((v) => v.lang === 'pt') ?? versoes[0];
       const atual = versoes.find((v) => v.lang === lang) ?? base;
       return { ...atual, ordem: base.ordem, idiomas: versoes };
-    }).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }));
+    });
 
     res.json({ success: true, produtos });
   } catch (err) {
