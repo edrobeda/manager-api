@@ -29,6 +29,51 @@ router.get('/', authorize('superadmin', 'admin', 'viewer'), async (req, res) => 
   }
 });
 
+// GET /clientes/export — leads com histórico de partidas/prêmios (para exportação configurável)
+router.get('/export', authorize('superadmin', 'admin', 'viewer'), async (req, res) => {
+  try {
+    const filter = tenantFilter(req);
+    if (req.user.role === 'superadmin' && req.query.tenant_id) {
+      filter['clientes.tenant_id'] = req.query.tenant_id;
+    }
+
+    const clientes = await db('clientes')
+      .where(filter)
+      .leftJoin('tenants', 'clientes.tenant_id', 'tenants.id')
+      .select(
+        'clientes.*',
+        'tenants.nome as tenant_nome',
+        'tenants.slug as tenant_slug',
+      )
+      .orderBy('clientes.criado_em', 'desc');
+
+    const clienteIds = clientes.map(c => c.id);
+    const partidas = clienteIds.length
+      ? await db('partidas')
+          .whereIn('cliente_id', clienteIds)
+          .leftJoin('premios', 'partidas.premio_id', 'premios.id')
+          .select(
+            'partidas.*',
+            'premios.nome as premio_nome',
+            'premios.subnome as premio_subnome',
+            'premios.tier as premio_tier',
+          )
+          .orderBy('partidas.jogado_em', 'desc')
+      : [];
+
+    const partidasPorCliente = {};
+    for (const p of partidas) {
+      (partidasPorCliente[p.cliente_id] ??= []).push(p);
+    }
+
+    const rows = clientes.map(c => ({ ...c, partidas: partidasPorCliente[c.id] || [] }));
+
+    res.json({ success: true, clientes: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /clientes/grupos — lista tenants com contagem de leads (superadmin)
 router.get('/grupos', authorize('superadmin', 'admin', 'viewer'), async (req, res) => {
   try {
