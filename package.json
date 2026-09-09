@@ -6,7 +6,12 @@
     "start": "node index.js",
     "migrate": "knex migrate:latest",
     "migrate:rollback": "knex migrate:rollback",
-    "migrate:make": "knex migrate:make"
+    "migrate:make": "knex migrate:make",
+    "migrate:core": "knex migrate:latest --knexfile ./knexfile.core.js",
+    "migrate:core:rollback": "knex migrate:rollback --knexfile ./knexfile.core.js",
+    "migrate:core:make": "knex migrate:make --knexfile ./knexfile.core.js",
+    "seed:core": "node scripts/seed-core-from-mydb.js",
+    "test:core": "node scripts/smoke-core.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
