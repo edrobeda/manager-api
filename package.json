@@ -11,7 +11,16 @@
     "migrate:core:rollback": "knex migrate:rollback --knexfile ./knexfile.core.js",
     "migrate:core:make": "knex migrate:make --knexfile ./knexfile.core.js",
     "seed:core": "node scripts/seed-core-from-mydb.js",
-    "test:core": "node scripts/smoke-core.js"
+    "test:core": "node scripts/smoke-core.js",
+    "migrate:vitrine": "knex migrate:latest --knexfile ./knexfile.vitrine.js",
+    "migrate:vitrine:rollback": "knex migrate:rollback --knexfile ./knexfile.vitrine.js",
+    "migrate:vitrine:make": "knex migrate:make --knexfile ./knexfile.vitrine.js",
+    "migrate:jogo": "knex migrate:latest --knexfile ./knexfile.jogo.js",
+    "migrate:jogo:rollback": "knex migrate:rollback --knexfile ./knexfile.jogo.js",
+    "migrate:jogo:make": "knex migrate:make --knexfile ./knexfile.jogo.js",
+    "seed:vitrine": "node scripts/seed-vitrine-from-mydb.js",
+    "seed:jogo": "node scripts/seed-jogo-from-mydb.js",
+    "check-orphans": "node scripts/check-orphans.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
