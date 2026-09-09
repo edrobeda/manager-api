@@ -4,6 +4,7 @@ const cors = require('cors');
 const path = require('path');
 const auth = require('./middleware/basicAuth');
 const serviceAuth = require('./middleware/serviceAuth');
+const vitrineDeviceAuth = require('./middleware/vitrineDeviceAuth');
 
 const app = express();
 app.use(cors());
@@ -19,6 +20,9 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api/totem-uploads', express.static(path.join(__dirname, 'uploads')));
 // Redirect de link curto — público porque quem escaneia o QR code não tem chave de API
 app.use('/r', require('./routes/redirect'));
+// Idem, mas pro app Vitrine multitenant novo (Fase 2, banco vitrine) — path próprio
+// pra não colidir com /r/:codigo, que continua servindo os links antigos em mydb.
+app.use('/r-vitrine', require('./routes/vitrineRedirect'));
 // Cidades/estados (IBGE) — dado de referência público, sem tenant, pra qualquer
 // formulário (ex: cadastro de um game) usar direto sem precisar de chave de API
 app.use('/api', require('./routes/localizacao'));
@@ -52,6 +56,12 @@ app.use('/api/acessos',     auth, require('./routes/acessos'));
 app.use('/api/ctx',      serviceAuth, require('./routes/ctx'));
 app.use('/api/keys',     serviceAuth, require('./routes/keys'));
 app.use('/api/webhooks', serviceAuth, require('./routes/webhooks'));
+
+// App Vitrine multitenant (Fase 2 do ROADMAP.md) — lê/escreve só no banco vitrine
+// (db.vitrine.js), autenticado por chave de dispositivo resolvida via core
+// (vitrineDeviceAuth.js), nunca no mydb. totem_vetnil continua em /api/totem (mydb),
+// intocado — isto é um caminho paralelo, ainda sem consumidor real/cutover.
+app.use('/api/vitrine-app', vitrineDeviceAuth, require('./routes/vitrineApp'));
 
 const PORT = process.env.PORT || 3004;
 app.listen(PORT, () => console.log(`Manager API rodando na porta ${PORT}`));

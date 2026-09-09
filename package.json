@@ -20,7 +20,8 @@
     "migrate:jogo:make": "knex migrate:make --knexfile ./knexfile.jogo.js",
     "seed:vitrine": "node scripts/seed-vitrine-from-mydb.js",
     "seed:jogo": "node scripts/seed-jogo-from-mydb.js",
-    "check-orphans": "node scripts/check-orphans.js"
+    "check-orphans": "node scripts/check-orphans.js",
+    "test:vitrine": "node scripts/smoke-vitrine.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
