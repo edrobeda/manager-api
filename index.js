@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const auth = require('./middleware/basicAuth');
+const serviceAuth = require('./middleware/serviceAuth');
 
 const app = express();
 app.use(cors());
@@ -45,6 +46,12 @@ app.use('/api/totem/acessos', auth, require('./routes/acessos'));
 app.use('/api/totem',       auth, require('./routes/totemPublic'));
 app.use('/api/short-links', auth, require('./routes/shortLinks'));
 app.use('/api/acessos',     auth, require('./routes/acessos'));
+
+// Core de identidade (Fase 0 do ROADMAP.md) — lê/escreve só no banco eventifylab
+// (db.core.js), nunca no mydb. Sem consumidor real ainda (Vitrine/Jogo nascem na Fase 2).
+app.use('/api/ctx',      serviceAuth, require('./routes/ctx'));
+app.use('/api/keys',     serviceAuth, require('./routes/keys'));
+app.use('/api/webhooks', serviceAuth, require('./routes/webhooks'));
 
 const PORT = process.env.PORT || 3004;
 app.listen(PORT, () => console.log(`Manager API rodando na porta ${PORT}`));
