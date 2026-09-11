@@ -59,4 +59,40 @@ router.get('/resolve', async (req, res) => {
   }
 });
 
+// GET /api/ctx/resolve-by-host?host={host}
+// Resolve tenant/ativação a partir do domínio público que bateu na request de um
+// serviço externo (game-vetnil, game-vetnil-pet) — via X-Forwarded-Host do Caddy, em
+// vez de um token/tenant_id fixo no .env de cada deploy. Mesmo shape de resposta de
+// POST /api/keys/validate. Ver tabela `dominios` (migrations-core) e ROADMAP.md.
+router.get('/resolve-by-host', async (req, res) => {
+  try {
+    const { host } = req.query;
+    if (!host) return res.status(400).json({ error: 'host é obrigatório' });
+
+    const dominio = await dbCore('dominios').where({ host }).first();
+    if (!dominio) return res.status(404).json({ error: 'domínio não cadastrado' });
+
+    const ativacao = await dbCore('ativacoes').where({ id: dominio.ativacao_id }).first();
+    if (!ativacao) return res.status(404).json({ error: 'ativação não encontrada para este domínio' });
+
+    const evento = await dbCore('eventos').where({ id: ativacao.evento_id }).first();
+    const produto = await dbCore('produtos').where({ id: ativacao.produto_id }).first();
+
+    const status = calcStatus({
+      data_inicio: ativacao.data_inicio ?? evento?.data_inicio,
+      data_fim: ativacao.data_fim ?? evento?.data_fim,
+    });
+
+    res.json({
+      ativacao_id: ativacao.id,
+      evento_id: ativacao.evento_id,
+      produto: produto?.slug ?? null,
+      tenant_id: evento?.tenant_id ?? null,
+      janela_ativa: status === 'ativo',
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
