@@ -89,6 +89,10 @@ router.get('/resolve-by-host', async (req, res) => {
       produto: produto?.slug ?? null,
       tenant_id: evento?.tenant_id ?? null,
       janela_ativa: status === 'ativo',
+      // status completo (agendado/ativo/expirando/encerrado) — quem chama decide se
+      // trata "expirando" como ativo ou não (game-vetnil/game-vetnil-pet tratam como
+      // ativo, pra manter o mesmo comportamento de antes desta migração).
+      status,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
