@@ -2,7 +2,8 @@ const router = require('express').Router();
 const db = require('../db');
 const { obterOuCriarShortLink } = require('../utils/shortLinks');
 
-const CAMPOS = ['slug', 'lang', 'nome', 'linha', 'descricao_curta', 'descricao', 'imagem_produto_url', 'imagem_banner_url', 'video_url', 'video_local_url', 'url_ficha', 'extras', 'ordem', 'destaque', 'serie', 'banner_institucional'];
+const CAMPOS = ['slug', 'lang', 'nome', 'linha', 'descricao_curta', 'descricao', 'imagem_produto_url', 'imagem_banner_url', 'video_url', 'video_local_url', 'url_ficha', 'extras', 'ordem', 'destaque', 'serie', 'banner_institucional']
+  .map((campo) => `produtos_totem.${campo}`);
 
 // Deriva o tenant e o evento a partir da chave de API usada.
 // Chave sem evento_id não tem como identificar o tenant com segurança — bloqueada.
@@ -68,11 +69,17 @@ router.get('/produtos', async (req, res) => {
     // Busca todas as versões de idioma de uma vez — permite montar a lista no idioma pedido
     // e ainda embutir as traduções de cada produto (pro totem trocar de idioma sem nova chamada de rede)
     // banner_institucional entra mesmo com ativo=false — é um item só de banner, não um produto real
+    // A seção de cada produto (nome e ordem) vem de series_totem; série desativada
+    // é tratada como ausência de série, e o produto cai no fim, depois de todas as seções.
     const todos = await db('produtos_totem')
-      .where({ tenant_id: tenantId })
-      .andWhere((qb) => qb.where('ativo', true).orWhere('banner_institucional', true))
-      .orderBy('ordem', 'asc')
-      .select(CAMPOS);
+      .leftJoin('series_totem', function () {
+        this.on('series_totem.id', 'produtos_totem.serie_id').andOn('series_totem.ativo', db.raw('true'));
+      })
+      .where({ 'produtos_totem.tenant_id': tenantId })
+      .andWhere((qb) => qb.where('produtos_totem.ativo', true).orWhere('produtos_totem.banner_institucional', true))
+      .orderByRaw('series_totem.ordem asc nulls last')
+      .orderBy('produtos_totem.ordem', 'asc')
+      .select([...CAMPOS, 'series_totem.ordem as serie_ordem']);
 
     const baseUrl = baseUrlDe(req);
     await comLinkCurtoDeFicha(todos, eventoId, baseUrl);
