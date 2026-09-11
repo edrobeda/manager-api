@@ -41,6 +41,7 @@ app.use('/api/game',        auth, require('./routes/game'));
 app.use('/api/uploads',     auth, require('./routes/uploads'));
 app.use('/api/totem-uploads', auth, require('./routes/totemUploads'));
 app.use('/api/produtos-totem', auth, require('./routes/produtosTotem'));
+app.use('/api/series-totem', auth, require('./routes/seriesTotem'));
 app.use('/api/config-totem', auth, require('./routes/configTotem'));
 // O totem_vetnil sempre chamou /api/totem/acessos (BASE_URL do front é .../api/totem), mas essa rota só
 // existia em /api/acessos — POST de página/vídeo assistido sempre deu 404 silencioso (catch vazio no front),
