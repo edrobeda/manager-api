@@ -26,10 +26,14 @@ app.use('/r-vitrine', require('./routes/vitrineRedirect'));
 // Cidades/estados (IBGE) — dado de referência público, sem tenant, pra qualquer
 // formulário (ex: cadastro de um game) usar direto sem precisar de chave de API
 app.use('/api', require('./routes/localizacao'));
+// Linktree público (eventifylab.com/links, site estático em eventify-app) —
+// fetch client-side sem chave de API, mesmo espírito de /api/estados acima
+app.use('/api/links-public', require('./routes/linksPublic'));
 
 // Rotas protegidas
 app.use('/api/backups',     auth, require('./routes/backups'));
 app.use('/api/webs',        auth, require('./routes/webs'));
+app.use('/api/links',       auth, require('./routes/links'));
 app.use('/api/tenants',     auth, require('./routes/tenants'));
 app.use('/api/quiz',        auth, require('./routes/quiz'));
 app.use('/api/premios',     auth, require('./routes/premios'));
