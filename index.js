@@ -64,5 +64,11 @@ app.use('/api/webhooks', serviceAuth, require('./routes/webhooks'));
 // intocado — isto é um caminho paralelo, ainda sem consumidor real/cutover.
 app.use('/api/vitrine-app', vitrineDeviceAuth, require('./routes/vitrineApp'));
 
+// Portal do cliente (Fase 4 do ROADMAP.md) — self-service em {tenant}.eventifylab.com/admin.
+// Lê/escreve só no banco eventifylab (db.core.js), sempre escopado por req.user.tenantId
+// (sem bypass de superadmin — ver routes/portal/*.js). O JWT é o mesmo emitido por
+// /api/auth/login pro staff, os tenant ids batem 1:1 entre mydb e eventifylab (seed da Fase 0).
+app.use('/api/portal', auth, require('./routes/portal'));
+
 const PORT = process.env.PORT || 3004;
 app.listen(PORT, () => console.log(`Manager API rodando na porta ${PORT}`));
