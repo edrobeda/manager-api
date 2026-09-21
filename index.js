@@ -57,6 +57,9 @@ app.use('/api/acessos',     auth, require('./routes/acessos'));
 app.use('/api/ctx',      serviceAuth, require('./routes/ctx'));
 app.use('/api/keys',     serviceAuth, require('./routes/keys'));
 app.use('/api/webhooks', serviceAuth, require('./routes/webhooks'));
+// Fase 5 do ROADMAP.md — produtos empurram métricas de uso da ativação (hoje sem
+// consumidor real; salve vai usar quando a integração dele destravar, ver ROADMAP).
+app.use('/api/uso',      serviceAuth, require('./routes/uso'));
 
 // App Vitrine multitenant (Fase 2 do ROADMAP.md) — lê/escreve só no banco vitrine
 // (db.vitrine.js), autenticado por chave de dispositivo resolvida via core
