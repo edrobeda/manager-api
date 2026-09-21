@@ -42,6 +42,13 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Nome, data_inicio e data_fim são obrigatórios' });
     }
 
+    // eventos.created_by referencia core.users, mas core.users só foi semeado
+    // uma vez na Fase 0 (scripts/seed-core-from-mydb.js) — qualquer usuário criado
+    // no mydb depois disso não existe no core ainda (gap conhecido, ver ROADMAP).
+    // Sem essa checagem, o INSERT quebra com violação de FK pra qualquer usuário
+    // novo tentando criar evento pelo portal.
+    const usuarioExisteNoCore = await db('users').where({ id: req.user.userId }).first();
+
     const [evento] = await db('eventos')
       .insert({
         tenant_id: tenantId,
@@ -51,7 +58,7 @@ router.post('/', async (req, res) => {
         data_fim,
         local: local ? JSON.stringify(local) : null,
         origem: 'cliente',
-        created_by: req.user.userId,
+        created_by: usuarioExisteNoCore ? req.user.userId : null,
       })
       .returning('*');
 
