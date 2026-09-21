@@ -29,6 +29,9 @@ app.use('/api', require('./routes/localizacao'));
 // Linktree público (eventifylab.com/links, site estático em eventify-app) —
 // fetch client-side sem chave de API, mesmo espírito de /api/estados acima
 app.use('/api/links-public', require('./routes/linksPublic'));
+// tracking de navegacao da pagina /links (visualizacao + clique em botao) —
+// publico, mesmo espirito de links-public acima
+app.use('/api/links-track', require('./routes/linksTrack'));
 
 // Rotas protegidas
 app.use('/api/backups',     auth, require('./routes/backups'));

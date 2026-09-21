@@ -6,13 +6,19 @@ const { obterOuCriarShortLink } = require('../utils/shortLinks');
 const PUBLIC_BASE_URL = 'https://eventifylab.com';
 const LINKS_PAGE_URL = `${PUBLIC_BASE_URL}/links`;
 
-// link curto + QR fixo + contagem de escaneamentos da pagina eventifylab.com/links
-// (não de cada botão individual — é a página inteira que é divulgada por QR).
+// link curto + QR fixo + contagens da pagina eventifylab.com/links, por
+// tipo de evento: escaneou o QR (link_externo, via GET /r/:codigo),
+// visualizou a pagina (pagina_links) e clicou em algum botao (clique_links).
 // Precisa vir ANTES de GET /:id, senão "qr-info" seria interpretado como um id.
 router.get('/qr-info', authorize('superadmin', 'admin', 'viewer'), async (req, res) => {
   try {
     const link = await obterOuCriarShortLink(LINKS_PAGE_URL, null);
-    const totalRow = await db('acessos').where({ short_link_id: link.id }).count('id as total').first();
+    const contagens = await db('acessos')
+      .where({ short_link_id: link.id })
+      .select('tipo')
+      .count('id as total')
+      .groupBy('tipo');
+    const porTipo = Object.fromEntries(contagens.map((c) => [c.tipo, Number(c.total)]));
     const ultimo = await db('acessos').where({ short_link_id: link.id }).orderBy('criado_em', 'desc').first();
 
     res.json({
@@ -21,9 +27,44 @@ router.get('/qr-info', authorize('superadmin', 'admin', 'viewer'), async (req, r
       url: `${PUBLIC_BASE_URL}/r/${link.codigo}`,
       qrSvgUrl: `${PUBLIC_BASE_URL}/r/${link.codigo}/qrcode.svg`,
       qrPngUrl: `${PUBLIC_BASE_URL}/r/${link.codigo}/qrcode.png`,
-      totalEscaneamentos: Number(totalRow.total),
-      ultimoEscaneamentoEm: ultimo ? ultimo.criado_em : null,
+      totalEscaneamentos: porTipo.link_externo || 0,
+      totalVisualizacoes: porTipo.pagina_links || 0,
+      totalCliques: porTipo.clique_links || 0,
+      ultimoAcessoEm: ultimo ? ultimo.criado_em : null,
     });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// registro completo de navegacao (visualizacoes + cliques, com sessao_id
+// pra reconstruir o percurso de cada visita) — usado pelo modal de
+// relatorio/export no painel (ver LinksAnalyticsModal.jsx). referencia de
+// cliques e o ID do link (ver routes/linksTrack.js) — resolve pro label
+// ATUAL aqui, nao guarda o texto direto no acesso, pra sobreviver a uma
+// renomeacao do botao depois.
+router.get('/analytics', authorize('superadmin', 'admin', 'viewer'), async (req, res) => {
+  try {
+    const link = await obterOuCriarShortLink(LINKS_PAGE_URL, null);
+    const acessos = await db('acessos')
+      .where({ short_link_id: link.id })
+      .select('id', 'tipo', 'referencia', 'sessao_id', 'criado_em')
+      .orderBy('criado_em', 'asc');
+
+    const idsClicados = [...new Set(acessos.filter((a) => a.tipo === 'clique_links').map((a) => a.referencia))];
+    const linksClicados = idsClicados.length
+      ? await db('tb_links').whereIn('id', idsClicados).select('id', 'label')
+      : [];
+    const labelPorId = Object.fromEntries(linksClicados.map((l) => [String(l.id), l.label]));
+
+    const acessosComLabel = acessos.map((a) => ({
+      ...a,
+      referencia_label: a.tipo === 'clique_links'
+        ? (labelPorId[a.referencia] || `(link removido #${a.referencia})`)
+        : a.referencia,
+    }));
+
+    res.json({ success: true, acessos: acessosComLabel });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -50,10 +91,19 @@ router.post('/reorder', authorize('superadmin', 'admin'), async (req, res) => {
   }
 });
 
+// inclui a contagem de cliques de CADA link (por id, ver routes/linksTrack.js)
+// — mostrada como coluna na lista do painel
 router.get('/', authorize('superadmin', 'admin', 'viewer'), async (req, res) => {
   try {
     const links = await db('tb_links').select('*').orderBy('position').orderBy('id');
-    res.json({ success: true, links });
+    const cliques = await db('acessos')
+      .where({ tipo: 'clique_links' })
+      .select('referencia')
+      .count('id as total')
+      .groupBy('referencia');
+    const cliquesPorId = Object.fromEntries(cliques.map((c) => [c.referencia, Number(c.total)]));
+    const linksComCliques = links.map((l) => ({ ...l, cliques: cliquesPorId[String(l.id)] || 0 }));
+    res.json({ success: true, links: linksComCliques });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
