@@ -60,6 +60,12 @@ app.use('/api/webhooks', serviceAuth, require('./routes/webhooks'));
 // Fase 5 do ROADMAP.md — produtos empurram métricas de uso da ativação (hoje sem
 // consumidor real; salve vai usar quando a integração dele destravar, ver ROADMAP).
 app.use('/api/uso',      serviceAuth, require('./routes/uso'));
+// Fase 6 do ROADMAP.md — webhook de pagamento (Asaas → core). SEM serviceAuth: quem
+// chama é o gateway externo, não um produto nosso — autenticação própria dentro da
+// rota (ASAAS_WEBHOOK_TOKEN, ver routes/webhookAsaas.js). Path distinto de
+// /api/webhooks pra não colidir com o middleware daquele (serviceAuth é pra
+// core→produto, direção oposta).
+app.use('/api/webhooks-asaas', require('./routes/webhookAsaas'));
 
 // App Vitrine multitenant (Fase 2 do ROADMAP.md) — lê/escreve só no banco vitrine
 // (db.vitrine.js), autenticado por chave de dispositivo resolvida via core
