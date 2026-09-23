@@ -119,12 +119,17 @@ router.get('/estatisticas', async (req, res) => {
       .map((c) => parseJanelaAnalitica(c.valor))
       .filter(Boolean);
 
+    // Quando existe janela configurada (data_analiticas), ela é a única regra de data —
+    // não soma com o corte de "dias", senão um evento configurado fora do período
+    // selecionado some da tela mesmo estando dentro da janela que o admin definiu.
     const acessos = await dbVitrine('acessos')
       .leftJoin('short_links', 'short_links.id', 'acessos.short_link_id')
       .where('acessos.ativacao_id', ativacaoId)
-      .andWhere('acessos.criado_em', '>=', desde)
       .modify((qb) => {
-        if (janelas.length === 0) return;
+        if (janelas.length === 0) {
+          qb.andWhere('acessos.criado_em', '>=', desde);
+          return;
+        }
         qb.andWhere((sub) => {
           janelas.forEach(({ inicio, fim }) => sub.orWhereBetween('acessos.criado_em', [inicio, fim]));
         });
