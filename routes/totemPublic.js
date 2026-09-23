@@ -176,6 +176,7 @@ router.get('/estatisticas', async (req, res) => {
       .leftJoin('short_links', 'short_links.id', 'acessos.short_link_id')
       .where('acessos.evento_id', eventoId)
       .andWhere('acessos.criado_em', '>=', desde)
+      .andWhere('acessos.ativo', true)
       .modify((qb) => {
         if (janelas.length === 0) return;
         qb.andWhere((sub) => {
