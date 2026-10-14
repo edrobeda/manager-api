@@ -99,4 +99,62 @@ router.get('/resolve-by-host', async (req, res) => {
   }
 });
 
+// POST /api/ctx/provisionar { tenant_slug, tenant_nome, produto_slug, evento_nome,
+//   data_inicio?, data_fim? }
+// Fase 5 do ROADMAP.md — endpoint de serviço (service token, não JWT humano) que
+// falta pra um produto conseguir se auto-provisionar no core (hoje só existe
+// criação de tenant/evento via /api/tenants e /api/portal/eventos, ambos atrás de
+// `auth` humano). Primeiro consumidor é o `salve` (signup próprio: empresa raiz =
+// tenant, evento filho de parceiro = evento), mas serve qualquer produto com
+// cadastro aberto (ex. o produto "interactive" planejado no §14).
+// Idempotente por slug: tenant com aquele slug já existente é reaproveitado (nunca
+// duplicado) — é assim que uma empresa raiz de parceiro ganha vários eventos no
+// mesmo tenant, cada evento filho chamando de novo com o MESMO tenant_slug.
+// `evento_nome` sempre cria um evento NOVO (quem chama decide a idempotência disso
+// do lado dele, guardando o `evento_id_core` recebido — ver `src/core.js` do salve).
+// `data_inicio`/`data_fim` são opcionais porque nem todo produto tem data de evento
+// (ex. salve: um "evento" ali é uma página que fica no ar indefinidamente, sem data
+// fixa) — sem elas, usa a janela "sempre ativo" (agora até +10 anos), já que a
+// coluna é NOT NULL no schema do core e não vale a pena relaxar isso por um só
+// consumidor (ver ROADMAP.md, princípio de expand-and-contract).
+router.post('/provisionar', async (req, res) => {
+  try {
+    const { tenant_slug: tenantSlug, tenant_nome: tenantNome, produto_slug: produtoSlug, evento_nome: eventoNome } = req.body;
+    if (!tenantSlug || !tenantNome || !produtoSlug || !eventoNome) {
+      return res.status(400).json({ error: 'tenant_slug, tenant_nome, produto_slug e evento_nome são obrigatórios' });
+    }
+
+    const produto = await dbCore('produtos').where({ slug: produtoSlug }).first();
+    if (!produto) return res.status(404).json({ error: `produto '${produtoSlug}' não cadastrado no core` });
+
+    let tenant = await dbCore('tenants').where({ slug: tenantSlug }).first();
+    if (!tenant) {
+      [tenant] = await dbCore('tenants').insert({ slug: tenantSlug, nome: tenantNome }).returning('*');
+    }
+
+    let tenantProduto = await dbCore('tenant_produtos').where({ tenant_id: tenant.id, produto_id: produto.id }).first();
+    if (!tenantProduto) {
+      [tenantProduto] = await dbCore('tenant_produtos')
+        .insert({ tenant_id: tenant.id, produto_id: produto.id, plano: 'trial', status: 'ativo', ciclo: 'por_evento' })
+        .returning('*');
+    }
+
+    const agora = new Date();
+    const dataInicio = req.body.data_inicio ?? agora.toISOString();
+    const dataFim = req.body.data_fim ?? new Date(agora.getFullYear() + 10, agora.getMonth(), agora.getDate()).toISOString();
+
+    const [evento] = await dbCore('eventos')
+      .insert({ tenant_id: tenant.id, nome: eventoNome, data_inicio: dataInicio, data_fim: dataFim, origem: 'cliente', status: 'ativo' })
+      .returning('*');
+
+    const [ativacao] = await dbCore('ativacoes')
+      .insert({ evento_id: evento.id, produto_id: produto.id, tenant_produto_id: tenantProduto.id, status: 'ativo' })
+      .returning('*');
+
+    res.json({ tenant_id: tenant.id, evento_id: evento.id, ativacao_id: ativacao.id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
