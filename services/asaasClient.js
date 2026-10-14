@@ -1,10 +1,8 @@
 // Fase 6 do ROADMAP.md — lado EMISSOR (core → Asaas): cria cliente e cobrança
-// de verdade na API do Asaas. Construído sem conta real pra testar contra —
-// mapeamento de payload é a MELHOR ESTIMATIVA a partir da documentação
-// pública deles (https://docs.asaas.com/reference). Conferir campo a campo
-// assim que existir uma conta/API key real, antes de considerar isso testado
-// de verdade (mesma ressalva já feita em routes/webhookAsaas.js pro lado
-// receptor).
+// de verdade na API do Asaas. Validado ponta a ponta em 2026-10-14 contra uma
+// conta SANDBOX real (garantirCustomer + criarCobranca, payload sem ajuste
+// nenhum — ver Log do ROADMAP.md). Ainda não testado contra produção —
+// trocar ASAAS_API_KEY + ASAAS_API_URL quando existir conta de produção.
 //
 // Deliberadamente NÃO importado automaticamente por nada em produção: só é
 // usado por scripts/gerar-faturas.js, e mesmo lá atrás de --emitir (além do
