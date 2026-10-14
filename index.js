@@ -35,6 +35,7 @@ app.use('/api/backups',     auth, require('./routes/backups'));
 app.use('/api/webs',        auth, require('./routes/webs'));
 app.use('/api/links',       auth, require('./routes/links'));
 app.use('/api/tenants',     auth, require('./routes/tenants'));
+app.use('/api/core',        auth, require('./routes/core'));
 app.use('/api/quiz',        auth, require('./routes/quiz'));
 app.use('/api/premios',     auth, require('./routes/premios'));
 app.use('/api/clientes',    auth, require('./routes/clientes'));
