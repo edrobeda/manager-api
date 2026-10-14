@@ -1,11 +1,13 @@
 // Fase 6 do ROADMAP.md — webhook de pagamento do gateway de cobrança (Asaas
-// recomendado, ver ROADMAP §8 e §13 "Questões em aberto"). Isso é só o lado
-// RECEPTOR (Asaas → core): valida um token compartilhado próprio (não é o
-// mesmo CORE_SERVICE_TOKEN dos outros endpoints de serviço), atualiza
-// `faturas.status`. NÃO existe ainda o lado emissor (core → Asaas, criar
-// cobrança de verdade) — isso precisa de uma conta Asaas real + API key,
-// que não tenho; construir aquele lado sem poder testar contra a API de
-// verdade seria mais risco que valor. Ver scripts/gerar-faturas.js e
+// recomendado, ver ROADMAP §8). Lado RECEPTOR (Asaas → core): valida um
+// token compartilhado próprio (não é o mesmo CORE_SERVICE_TOKEN dos outros
+// endpoints de serviço, mandado no header `asaas-access-token` — é o
+// `authToken` configurado na própria Asaas via API, ver POST /v3/webhooks),
+// atualiza `faturas.status`. Lado emissor em services/asaasClient.js.
+// Validado ponta a ponta em 2026-10-14 contra uma conta SANDBOX real:
+// webhook registrado via API, pagamento confirmado no sandbox, evento
+// chegou aqui sozinho (levou ~25s) e atualizou a fatura sem intervenção
+// manual — ver Log do ROADMAP.md. Ver scripts/gerar-faturas.js e
 // scripts/suspender-inadimplentes.js pro resto do fluxo (dry-run por
 // padrão, nunca automático).
 const router = require('express').Router();
@@ -13,11 +15,11 @@ const dbCore = require('../db.core');
 
 const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN || null;
 
-// Formato exato do payload do Asaas ainda não foi conferido contra a conta
-// real (não existe ainda) — este mapeamento é a MELHOR ESTIMATIVA a partir
-// da documentação pública deles (evento `event`, `payment.externalReference`
-// == faturas.id, `payment.id` == gateway_id). Conferir contra o payload real
-// assim que a conta existir, antes de considerar isso testado de verdade.
+// Formato do payload confirmado contra o sandbox real em 2026-10-14 pro
+// evento de pagamento confirmado (`event`, `payment.externalReference` ==
+// faturas.id, `payment.id` == gateway_id) — PAYMENT_OVERDUE continua não
+// testado de verdade (não dá pra simular vencimento no sandbox sem esperar
+// a data passar).
 router.post('/', async (req, res) => {
   if (!ASAAS_WEBHOOK_TOKEN) {
     return res.status(503).json({ error: 'Webhook do Asaas não configurado (ASAAS_WEBHOOK_TOKEN ausente)' });
