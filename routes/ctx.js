@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const dbCore = require('../db.core');
 const { calcStatus } = require('../utils/calcStatus');
+const { criarAtivacaoUsoLivre } = require('../services/ativacoes');
 
 // GET /api/ctx/resolve?tenant={slug}&evento={id}&produto={surface}
 // Produto resolve o contexto completo de uma requisição num só round-trip
@@ -139,17 +140,14 @@ router.post('/provisionar', async (req, res) => {
         .returning('*');
     }
 
-    const agora = new Date();
-    const dataInicio = req.body.data_inicio ?? agora.toISOString();
-    const dataFim = req.body.data_fim ?? new Date(agora.getFullYear() + 10, agora.getMonth(), agora.getDate()).toISOString();
-
-    const [evento] = await dbCore('eventos')
-      .insert({ tenant_id: tenant.id, nome: eventoNome, data_inicio: dataInicio, data_fim: dataFim, origem: 'cliente', status: 'ativo' })
-      .returning('*');
-
-    const [ativacao] = await dbCore('ativacoes')
-      .insert({ evento_id: evento.id, produto_id: produto.id, tenant_produto_id: tenantProduto.id, status: 'ativo' })
-      .returning('*');
+    const { evento, ativacao } = await criarAtivacaoUsoLivre(dbCore, {
+      tenantId: tenant.id,
+      produtoId: produto.id,
+      tenantProdutoId: tenantProduto.id,
+      nome: eventoNome,
+      dataInicioEvento: req.body.data_inicio,
+      dataFimEvento: req.body.data_fim,
+    });
 
     res.json({ tenant_id: tenant.id, evento_id: evento.id, ativacao_id: ativacao.id });
   } catch (err) {

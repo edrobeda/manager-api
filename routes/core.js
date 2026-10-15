@@ -13,6 +13,9 @@
 const router = require('express').Router();
 const authorize = require('../middleware/authorize');
 const dbCore = require('../db.core');
+const db = require('../db');
+const { criarAtivacaoUsoLivre } = require('../services/ativacoes');
+const { gerarFaturaParaContrato } = require('../services/faturamento');
 
 // --- produtos (catálogo do core) --------------------------------------------
 
@@ -111,6 +114,154 @@ router.get('/tenants/:slug/produtos', authorize('superadmin'), async (req, res) 
       );
 
     res.json({ success: true, tenant_no_core: true, tenant_id_core: tenant.id, contratos });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- sincronizar tenant legado (mydb) pro core -----------------------------
+
+// POST /api/core/tenants/:slug/sincronizar — cria no core (eventifylab) um
+// tenant que só existe no `mydb` (criado antes do upsert automático em
+// routes/tenants.js existir, ou nunca sincronizado). Idempotente: se já
+// existe no core, só devolve ele. Botão "Criar no core agora" no Alert do
+// drawer de Produtos contratados (manager-skin) chama isso.
+router.post('/tenants/:slug/sincronizar', authorize('superadmin'), async (req, res) => {
+  try {
+    const legado = await db('tenants').where({ slug: req.params.slug }).first();
+    if (!legado) return res.status(404).json({ error: `tenant "${req.params.slug}" não encontrado no mydb` });
+
+    let tenant = await dbCore('tenants').where({ slug: legado.slug }).first();
+    if (!tenant) {
+      [tenant] = await dbCore('tenants')
+        .insert({ slug: legado.slug, nome: legado.nome, logo_url: legado.logo_url, cor_primaria: legado.cor_primaria })
+        .returning('*');
+    }
+    res.json({ success: true, tenant_id_core: tenant.id, tenant });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- eventos do core por tenant (pro formulário de contrato "modo evento") --
+
+router.get('/tenants/:slug/eventos', authorize('superadmin'), async (req, res) => {
+  try {
+    const tenant = await dbCore('tenants').where({ slug: req.params.slug }).first();
+    if (!tenant) return res.json({ success: true, eventos: [] });
+
+    const eventos = await dbCore('eventos').where({ tenant_id: tenant.id }).orderBy('data_inicio', 'desc');
+    res.json({ success: true, eventos });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- criar contrato (+ ativação) --------------------------------------------
+
+// POST /api/core/tenants/:slug/produtos — cria o contrato (tenant_produtos) e
+// a ativação correspondente. `modo` decide se a ativação usa um evento
+// existente do tenant ou um evento sintético "sempre ativo" (ver
+// services/ativacoes.js). Contrato sozinho sem ativação não serve pra nada
+// (nenhum produto teria o que resolver), por isso as duas linhas nascem juntas
+// aqui — diferente de /api/ctx/provisionar, que é o produto se
+// auto-provisionando (idempotente, reaproveita contrato existente); aqui é o
+// staff criando um contrato novo deliberadamente, sempre cria.
+router.post('/tenants/:slug/produtos', authorize('superadmin'), async (req, res) => {
+  try {
+    const {
+      produto_id: produtoId, plano, valor_centavos: valorCentavos, ciclo,
+      data_fim: dataFim, config, modo, evento_id: eventoId,
+    } = req.body;
+
+    if (!produtoId || !plano || !modo) {
+      return res.status(400).json({ error: 'produto_id, plano e modo são obrigatórios' });
+    }
+    if (!['evento', 'uso_livre'].includes(modo)) {
+      return res.status(400).json({ error: 'modo deve ser "evento" ou "uso_livre"' });
+    }
+    if (modo === 'evento' && !eventoId) {
+      return res.status(400).json({ error: 'evento_id é obrigatório quando modo="evento"' });
+    }
+
+    const tenant = await dbCore('tenants').where({ slug: req.params.slug }).first();
+    if (!tenant) return res.status(404).json({ error: `tenant "${req.params.slug}" não encontrado no core — sincronize primeiro` });
+
+    const produto = await dbCore('produtos').where({ id: produtoId }).first();
+    if (!produto) return res.status(404).json({ error: 'produto não encontrado' });
+
+    // Status começa 'trial' (se o plano for trial) ou 'pendente' (plano pago,
+    // aguardando o staff confirmar — ver POST /tenant-produtos/:id/confirmar).
+    // Nunca nasce 'ativo' direto: confirmar é a ação deliberada que liga o
+    // contrato de verdade (e dispara a 1ª cobrança quando for o caso).
+    const [tenantProduto] = await dbCore('tenant_produtos')
+      .insert({
+        tenant_id: tenant.id,
+        produto_id: produtoId,
+        plano,
+        valor_centavos: valorCentavos || 0,
+        ciclo: ciclo || 'por_evento',
+        status: plano === 'trial' ? 'trial' : 'pendente',
+        data_fim: dataFim || null,
+        config: config ? JSON.stringify(config) : '{}',
+      })
+      .returning('*');
+
+    let evento;
+    let ativacao;
+    if (modo === 'evento') {
+      evento = await dbCore('eventos').where({ id: eventoId, tenant_id: tenant.id }).first();
+      if (!evento) return res.status(404).json({ error: 'evento não encontrado para este tenant' });
+
+      [ativacao] = await dbCore('ativacoes')
+        .insert({ evento_id: evento.id, produto_id: produtoId, tenant_produto_id: tenantProduto.id, status: 'ativo' })
+        .returning('*');
+    } else {
+      // uso_livre: trial sem data_fim explícita ganha +14 dias de janela —
+      // é isso que de fato limita o trial (ver services/ativacoes.js e
+      // utils/calcStatus.js), não a janela do evento sintético por trás, que
+      // fica sempre aberta.
+      const dataFimAtivacao = dataFim
+        ? new Date(dataFim)
+        : (plano === 'trial' ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) : null);
+
+      ({ evento, ativacao } = await criarAtivacaoUsoLivre(dbCore, {
+        tenantId: tenant.id,
+        produtoId,
+        tenantProdutoId: tenantProduto.id,
+        nome: `${produto.nome} — uso livre`,
+        dataFimAtivacao,
+      }));
+    }
+
+    res.json({ success: true, contrato: tenantProduto, evento, ativacao });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- confirmar contrato (ativa + gera 1ª cobrança se não for trial/legado) --
+
+// POST /api/core/tenant-produtos/:id/confirmar — ação explícita de staff:
+// marca o contrato como 'ativo' e, se for um plano pago de verdade (não
+// trial/legado), gera a 1ª fatura agora e tenta emitir na Asaas. Reaproveita
+// services/faturamento.js (mesma lógica do scripts/gerar-faturas.js, só que
+// pontual e pra qualquer ciclo, inclusive por_evento).
+router.post('/tenant-produtos/:id/confirmar', authorize('superadmin'), async (req, res) => {
+  try {
+    const contrato = await dbCore('tenant_produtos').where({ id: req.params.id }).first();
+    if (!contrato) return res.status(404).json({ error: 'contrato não encontrado' });
+
+    const [atualizado] = await dbCore('tenant_produtos').where({ id: contrato.id }).update({ status: 'ativo' }).returning('*');
+
+    if (['trial', 'legado'].includes(atualizado.plano)) {
+      return res.json({ success: true, contrato: atualizado, fatura: null });
+    }
+
+    const emitir = !!process.env.ASAAS_API_KEY;
+    const { fatura, emissao, erroEmissao } = await gerarFaturaParaContrato(dbCore, atualizado, { emitir });
+
+    res.json({ success: true, contrato: atualizado, fatura, emissao, erroEmissao });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

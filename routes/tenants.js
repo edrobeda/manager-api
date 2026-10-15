@@ -2,9 +2,32 @@ const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const authorize = require('../middleware/authorize');
 const db = require('../db');
+const dbCore = require('../db.core');
 
 const PROVISIONER_URL = process.env.PROVISIONER_URL || 'http://172.19.0.1:3030';
 const PROVISIONER_SECRET = process.env.PROVISIONER_SECRET || 'provisioner-secret-change-me';
+
+// Mantém `eventifylab.tenants` (core) em dia com `mydb.tenants` (legado) na
+// criação/edição de tenant pelo Manager — sem isso, o tenant só existe no
+// `mydb` e o core nunca sabe dele (drawer de "Produtos contratados" sempre
+// mostra "sem registro no core", e não dá pra criar contrato/ativação pra
+// ele). Nunca derruba a operação no `mydb` se o core falhar — é um upsert de
+// melhor esforço (expand-and-contract, nunca quebrar o legado por causa do
+// novo). `slugAntigo` é passado na edição pra casar a linha certa do core
+// quando o slug muda.
+async function syncTenantToCore(tenant, slugAntigo = null) {
+  try {
+    const existente = await dbCore('tenants').where({ slug: slugAntigo || tenant.slug }).first();
+    const campos = { slug: tenant.slug, nome: tenant.nome, logo_url: tenant.logo_url, cor_primaria: tenant.cor_primaria };
+    if (existente) {
+      await dbCore('tenants').where({ id: existente.id }).update(campos);
+    } else {
+      await dbCore('tenants').insert(campos);
+    }
+  } catch (err) {
+    console.error(`[syncTenantToCore] falhou pro tenant "${tenant.slug}": ${err.message}`);
+  }
+}
 
 // Listar todos os tenants
 router.get('/', authorize('superadmin'), async (req, res) => {
@@ -23,6 +46,7 @@ router.post('/', authorize('superadmin'), async (req, res) => {
     if (!nome || !slug) return res.status(400).json({ error: 'Nome e slug são obrigatórios' });
 
     const [tenant] = await db('tenants').insert({ nome, slug, logo_url, cor_primaria }).returning('*');
+    await syncTenantToCore(tenant);
     res.status(201).json({ success: true, tenant });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -33,8 +57,10 @@ router.post('/', authorize('superadmin'), async (req, res) => {
 router.put('/:id', authorize('superadmin'), async (req, res) => {
   try {
     const { nome, slug, logo_url, cor_primaria } = req.body;
+    const antes = await db('tenants').where({ id: req.params.id }).first();
     const [tenant] = await db('tenants').where({ id: req.params.id }).update({ nome, slug, logo_url, cor_primaria }).returning('*');
     if (!tenant) return res.status(404).json({ error: 'Tenant não encontrado' });
+    await syncTenantToCore(tenant, antes?.slug);
     res.json({ success: true, tenant });
   } catch (err) {
     res.status(500).json({ error: err.message });
