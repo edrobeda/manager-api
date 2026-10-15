@@ -15,7 +15,7 @@
 // Uso: node scripts/gerar-faturas.js [--aplicar] [--emitir] [--competencia=YYYY-MM]
 const knex = require('knex');
 const core = knex(require('../knexfile.core').development);
-const { garantirCustomer, criarCobranca } = require('../services/asaasClient');
+const { gerarFaturaParaContrato } = require('../services/faturamento');
 
 const aplicar = process.argv.includes('--aplicar');
 const emitir = process.argv.includes('--emitir');
@@ -56,32 +56,11 @@ async function main() {
     );
 
     if (aplicar) {
-      const [fatura] = await core('faturas')
-        .insert({
-          tenant_id: contrato.tenant_id,
-          tenant_produto_id: contrato.id,
-          competencia,
-          valor_centavos: contrato.valor_centavos,
-          vencimento,
-          status: 'aberta',
-        })
-        .returning('*');
+      const { emissao, erroEmissao } = await gerarFaturaParaContrato(core, contrato, { competencia, vencimento, emitir });
 
       if (emitir) {
-        try {
-          const faturamento = await core('tenant_faturamento').where({ tenant_id: contrato.tenant_id }).first();
-          if (!faturamento) throw new Error('sem cadastro fiscal (tenant_faturamento) pra esse tenant');
-
-          const customerId = await garantirCustomer(core, faturamento);
-          const { gateway_id, link_pagamento } = await criarCobranca({ customerId, fatura });
-
-          await core('faturas').where({ id: fatura.id }).update({ gateway: 'asaas', gateway_id, link_pagamento });
-          console.log(`    ↳ emitida na Asaas: ${link_pagamento || gateway_id}`);
-        } catch (err) {
-          // Fatura local já existe (status 'aberta') mesmo se a emissão falhar —
-          // não deixa a falta de gateway travar o registro financeiro local.
-          console.error(`    ↳ falhou ao emitir na Asaas: ${err.message}`);
-        }
+        if (emissao) console.log(`    ↳ emitida na Asaas: ${emissao.link_pagamento || emissao.gateway_id}`);
+        else console.error(`    ↳ falhou ao emitir na Asaas: ${erroEmissao}`);
       }
     }
     criadas++;
