@@ -103,14 +103,29 @@ router.get('/tenants/:slug/produtos', authorize('superadmin'), async (req, res) 
     const tenant = await dbCore('tenants').where({ slug: req.params.slug }).first();
     if (!tenant) return res.json({ success: true, tenant_no_core: false, contratos: [] });
 
+    // left join ativacoes (1:1 com o contrato na prática, UNIQUE(evento_id,
+    // produto_id) não impede 2 ativações pro mesmo tenant_produto_id em tese,
+    // mas hoje a criação só gera 1) pra tela já saber se tem domínio vinculado
+    // sem round-trip extra. `dominio` via subquery escalar (não leftJoin) pra
+    // não duplicar a linha do contrato quando uma ativação tem mais de 1 alias
+    // de domínio — pega só o mais recente.
     const contratos = await dbCore('tenant_produtos')
       .where({ tenant_id: tenant.id })
       .join('produtos', 'produtos.id', 'tenant_produtos.produto_id')
+      .leftJoin('ativacoes', 'ativacoes.tenant_produto_id', 'tenant_produtos.id')
       .orderBy('tenant_produtos.created_at', 'desc')
       .select(
         'tenant_produtos.*',
         'produtos.nome as produto_nome',
-        'produtos.slug as produto_slug'
+        'produtos.slug as produto_slug',
+        'ativacoes.id as ativacao_id',
+        'ativacoes.evento_id as evento_id',
+        dbCore('dominios')
+          .select('host')
+          .whereRaw('dominios.ativacao_id = ativacoes.id')
+          .orderBy('created_at', 'desc')
+          .limit(1)
+          .as('dominio')
       );
 
     res.json({ success: true, tenant_no_core: true, tenant_id_core: tenant.id, contratos });
@@ -171,7 +186,7 @@ router.post('/tenants/:slug/produtos', authorize('superadmin'), async (req, res)
   try {
     const {
       produto_id: produtoId, plano, valor_centavos: valorCentavos, ciclo,
-      data_fim: dataFim, config, modo, evento_id: eventoId,
+      data_fim: dataFim, config, modo, evento_id: eventoId, dominio,
     } = req.body;
 
     if (!produtoId || !plano || !modo) {
@@ -234,8 +249,47 @@ router.post('/tenants/:slug/produtos', authorize('superadmin'), async (req, res)
       }));
     }
 
-    res.json({ success: true, contrato: tenantProduto, evento, ativacao });
+    // `dominio` opcional: produto novo (Vitrine/Jogo, sem domínio próprio no
+    // cadastro de `produtos`) só responde em produção se alguém registrar um
+    // host em `core.dominios` apontando pra essa ativação — sem isso a
+    // ativação existe mas não tem URL nenhuma funcionando (achado real,
+    // ver ROADMAP.md). Falha ao vincular (ex. host já usado por outra
+    // ativação) não derruba o contrato/ativação já criados — fica reportado
+    // pro staff resolver manualmente ou tentar outro host.
+    let dominioErro = null;
+    if (dominio) {
+      try {
+        await dbCore('dominios').insert({ host: dominio, ativacao_id: ativacao.id });
+      } catch (err) {
+        dominioErro = String(err.message).includes('unique')
+          ? `domínio "${dominio}" já está vinculado a outra ativação`
+          : err.message;
+      }
+    }
+
+    res.json({ success: true, contrato: tenantProduto, evento, ativacao, dominio_erro: dominioErro });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- vincular domínio a uma ativação existente ------------------------------
+
+// POST /api/core/ativacoes/:id/dominio { host } — pra quando o contrato já
+// foi criado sem domínio (ou o primeiro host escolhido não servia) e o staff
+// quer vincular/trocar depois, sem passar pelo SQL direto.
+router.post('/ativacoes/:id/dominio', authorize('superadmin'), async (req, res) => {
+  try {
+    const { host } = req.body;
+    if (!host) return res.status(400).json({ error: 'host é obrigatório' });
+
+    const ativacao = await dbCore('ativacoes').where({ id: req.params.id }).first();
+    if (!ativacao) return res.status(404).json({ error: 'ativação não encontrada' });
+
+    const [dominioRow] = await dbCore('dominios').insert({ host, ativacao_id: ativacao.id }).returning('*');
+    res.json({ success: true, dominio: dominioRow });
+  } catch (err) {
+    if (String(err.message).includes('unique')) return res.status(409).json({ error: `domínio "${req.body.host}" já está vinculado a outra ativação` });
     res.status(500).json({ error: err.message });
   }
 });
