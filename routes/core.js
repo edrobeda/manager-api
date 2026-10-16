@@ -110,9 +110,10 @@ router.get('/tenants/:slug/produtos', authorize('superadmin'), async (req, res) 
     // não duplicar a linha do contrato quando uma ativação tem mais de 1 alias
     // de domínio — pega só o mais recente.
     const contratos = await dbCore('tenant_produtos')
-      .where({ tenant_id: tenant.id })
+      .where({ 'tenant_produtos.tenant_id': tenant.id })
       .join('produtos', 'produtos.id', 'tenant_produtos.produto_id')
       .leftJoin('ativacoes', 'ativacoes.tenant_produto_id', 'tenant_produtos.id')
+      .leftJoin('eventos', 'eventos.id', 'ativacoes.evento_id')
       .orderBy('tenant_produtos.created_at', 'desc')
       .select(
         'tenant_produtos.*',
@@ -120,6 +121,9 @@ router.get('/tenants/:slug/produtos', authorize('superadmin'), async (req, res) 
         'produtos.slug as produto_slug',
         'ativacoes.id as ativacao_id',
         'ativacoes.evento_id as evento_id',
+        'eventos.nome as evento_nome',
+        'eventos.data_inicio as evento_data_inicio',
+        'eventos.data_fim as evento_data_fim',
         dbCore('dominios')
           .select('host')
           .whereRaw('dominios.ativacao_id = ativacoes.id')
@@ -290,6 +294,46 @@ router.post('/ativacoes/:id/dominio', authorize('superadmin'), async (req, res) 
     res.json({ success: true, dominio: dominioRow });
   } catch (err) {
     if (String(err.message).includes('unique')) return res.status(409).json({ error: `domínio "${req.body.host}" já está vinculado a outra ativação` });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- editar período de uma ativação (= "colocar um evento novo") -----------
+
+// PUT /api/core/ativacoes/:id/periodo { data_inicio, data_fim } — até agora só
+// o Portal do cliente (routes/portal/eventos.js, escopado a 1 tenant) editava
+// datas no core; staff não tinha como trocar a janela de um produto já
+// contratado (ex. o próximo evento de um jogo bespoke tipo game-vetnil-pet)
+// sem ir direto no banco.
+//
+// Atualiza a ATIVAÇÃO (ela tem prioridade sobre o evento em
+// utils/calcStatus.js: `ativacao.data_fim ?? evento.data_fim`) — é o campo
+// que de fato decide `janela_ativa`. Também espelha no evento vinculado,
+// EXCETO quando o evento parece ser o "sempre ativo" sintético de uma
+// ativação uso_livre (ver services/ativacoes.js, janela de +10 anos) — esse
+// nunca deve virar uma janela curta, senão quebra o "sempre ativo".
+router.put('/ativacoes/:id/periodo', authorize('superadmin'), async (req, res) => {
+  try {
+    const { data_inicio: dataInicio, data_fim: dataFim } = req.body;
+    if (!dataInicio || !dataFim) return res.status(400).json({ error: 'data_inicio e data_fim são obrigatórios' });
+
+    const ativacao = await dbCore('ativacoes').where({ id: req.params.id }).first();
+    if (!ativacao) return res.status(404).json({ error: 'ativação não encontrada' });
+
+    const [atualizada] = await dbCore('ativacoes')
+      .where({ id: ativacao.id })
+      .update({ data_inicio: dataInicio, data_fim: dataFim })
+      .returning('*');
+
+    const CINCO_ANOS_MS = 5 * 365 * 24 * 60 * 60 * 1000;
+    const evento = await dbCore('eventos').where({ id: ativacao.evento_id }).first();
+    const eventoEhSempreAtivo = evento && (new Date(evento.data_fim) - new Date(evento.data_inicio)) > CINCO_ANOS_MS;
+    if (evento && !eventoEhSempreAtivo) {
+      await dbCore('eventos').where({ id: evento.id }).update({ data_inicio: dataInicio, data_fim: dataFim });
+    }
+
+    res.json({ success: true, ativacao: atualizada, evento_sincronizado: !eventoEhSempreAtivo });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
