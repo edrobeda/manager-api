@@ -8,10 +8,14 @@ const tenantFilter = (req) =>
 router.get('/', async (req, res) => {
   try {
     const now = new Date();
+    // join com tenants só pra exibir nome/slug — superadmin vê eventos de
+    // todos os tenants aqui (tenantFilter vazio pra ele), sem isso não dava
+    // pra saber de quem é cada linha na tela.
     const rows = await db('eventos')
       .where(tenantFilter(req))
-      .orderBy('data_inicio', 'desc')
-      .select('*');
+      .leftJoin('tenants', 'tenants.id', 'eventos.tenant_id')
+      .orderBy('eventos.data_inicio', 'desc')
+      .select('eventos.*', 'tenants.nome as tenant_nome', 'tenants.slug as tenant_slug');
 
     // recalcula status na leitura
     const eventos = rows.map((e) => ({
